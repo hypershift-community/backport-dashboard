@@ -1,0 +1,8 @@
+jira:
+  url: "https://issues.redhat.com/"
+  token: "your-PAT-here"
+
+mongodb:
+  uri: "mongodb://localhost:27017/"
+  database: "jira_sync"
+  collection: "issues"
