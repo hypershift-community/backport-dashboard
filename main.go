@@ -245,9 +245,20 @@ func storeIssue(jiraClient *jira.Client, issueID string, depth uint) (bson.M, er
 	return data, nil
 }
 
+func getMapKeys(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 func syncIssues(jiraClient *jira.Client, mongoClient *mongo.Client, config *Config) error {
 	// Get MongoDB collection
 	collection := mongoClient.Database(config.MongoDB.Database).Collection(config.MongoDB.Collection)
+
+	// Keep track of documents updated in this sync
+	updatedDocuments := make(map[string]bool)
 
 	// JQL query to get main issues
 	jql := "project = OCPBUGS AND component = Hypershift AND \"Target Version\" = 4.19.0 AND \"Target Backport Versions\" is not EMPTY"
@@ -285,6 +296,9 @@ func syncIssues(jiraClient *jira.Client, mongoClient *mongo.Client, config *Conf
 				continue
 			}
 			log.Printf("Upserted issue %s", issue.Key)
+
+			// Track that this document was updated
+			updatedDocuments[issue.Key] = true
 		}
 
 		// Check if there are more issues to fetch
@@ -293,6 +307,18 @@ func syncIssues(jiraClient *jira.Client, mongoClient *mongo.Client, config *Conf
 		}
 		searchOptions.StartAt += len(issues)
 	}
+
+	// Remove documents that were not updated in this sync
+	deleteFilter := bson.M{
+		"_id": bson.M{"$nin": getMapKeys(updatedDocuments)},
+	}
+
+	deleteResult, err := collection.DeleteMany(context.Background(), deleteFilter)
+	if err != nil {
+		return fmt.Errorf("error removing stale documents: %w", err)
+	}
+
+	log.Printf("Removed %d stale documents", deleteResult.DeletedCount)
 
 	return nil
 }
