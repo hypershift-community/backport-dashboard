@@ -1,4 +1,4 @@
-module github.com/sjenning/backport-dashboard
+module github.com/hypershift-community/backport-dashboard
 
 go 1.21
 
