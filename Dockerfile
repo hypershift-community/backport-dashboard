@@ -25,8 +25,8 @@ WORKDIR /app
 # Copy the binary from builder stage
 COPY --from=builder /app/backport-dashboard .
 
-# Copy web files for the frontend
-COPY web/ /app/web/
+# Copy UI files for the frontend
+COPY ui/ /app/ui/
 
 # Expose the application port
 EXPOSE 8080

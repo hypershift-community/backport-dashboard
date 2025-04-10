@@ -4,5 +4,5 @@ jira:
 
 mongodb:
   uri: "mongodb://localhost:27017/"
-  database: "jira_sync"
+  database: "backport_dashboard"
   collection: "issues"

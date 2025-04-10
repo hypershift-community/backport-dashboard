@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backport-dashboard-sync
+  labels:
+    app: backport-dashboard
+spec:
+  schedule: "*/30 * * * *" # Run every 30 minutes
+  concurrencyPolicy: Forbid # Don't run concurrent sync jobs
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: backport-dashboard-sync
+        spec:
+          containers:
+            - name: backport-dashboard
+              image: quay.io/sjenning/backport-dashboard:latest
+              imagePullPolicy: Always
+              args: ["--sync"] # Run with the sync flag
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "30Mi"
+              volumeMounts:
+                - name: config-volume
+                  mountPath: /app/config.yaml
+                  subPath: config.yaml
+          volumes:
+            - name: config-volume
+              configMap:
+                name: backport-dashboard-config
+          restartPolicy: OnFailure

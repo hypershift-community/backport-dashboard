@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backport-dashboard
+  labels:
+    app: backport-dashboard
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backport-dashboard
+  template:
+    metadata:
+      labels:
+        app: backport-dashboard
+    spec:
+      containers:
+        - name: backport-dashboard
+          image: quay.io/sjenning/backport-dashboard:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "30Mi"
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+      volumes:
+        - name: config-volume
+          configMap:
+            name: backport-dashboard-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backport-dashboard-config
+data:
+  config.yaml: |
+    jira:
+      url: https://issues.redhat.com
+      token: your-PAT-here
+    mongodb:
+      uri: "mongodb://mongodb:27017/"
+      database: backport_dashboard
+      collection: issues
+    server:
+      port: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backport-dashboard
+  labels:
+    app: backport-dashboard
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: backport-dashboard
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: backport-dashboard
+  labels:
+    app: backport-dashboard
+spec:
+  to:
+    kind: Service
+    name: backport-dashboard
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

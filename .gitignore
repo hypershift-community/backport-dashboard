@@ -1,2 +1,3 @@
+manifests/deployment.yaml
 backport-dashboard
 config.yaml
