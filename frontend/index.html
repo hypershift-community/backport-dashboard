@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backport Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <header>
+        <h1>Backport Dashboard</h1>
+    </header>
+    <main>
+        <div class="container">
+            <div class="filter-controls">
+                <div class="filter-group">
+                    <label for="assignee-filter">Filter by Assignee:</label>
+                    <select id="assignee-filter">
+                        <option value="all">All Assignees</option>
+                        <!-- Options will be populated dynamically -->
+                    </select>
+                </div>
+
+                <div class="filter-group show-completed-control">
+                    <input type="checkbox" id="show-completed">
+                    <label for="show-completed">Show Completed Issues</label>
+                </div>
+            </div>
+            <div id="loading">Loading documents...</div>
+            <div id="cards-container"></div>
+        </div>
+    </main>
+    <script src="app.js"></script>
+</body>
+
+</html>
