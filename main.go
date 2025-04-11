@@ -263,7 +263,7 @@ func syncIssues(jiraClient *jira.Client, mongoClient *mongo.Client, config *Conf
 	updatedDocuments := make(map[string]bool)
 
 	// JQL query to get main issues
-	jql := `project = OCPBUGS AND component in (Hypershift, "HyperShift / Agent", "HyperShift / ARO", "HyperShift / OCP Virtualization", "HyperShift / OpenStack", "HyperShift / ROSA") AND "Target Backport Versions" is not EMPTY AND issueLinkType not in ("depends on")`
+	jql := `project = OCPBUGS AND component in (Hypershift, "HyperShift / Agent", "HyperShift / ARO", "HyperShift / OCP Virtualization", "HyperShift / OpenStack", "HyperShift / ROSA") AND "Target Backport Versions" is not EMPTY AND issueLinkType not in ("clones")`
 
 	// Search issues in Jira
 	searchOptions := &jira.SearchOptions{
