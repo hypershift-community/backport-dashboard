@@ -17,34 +17,41 @@ issue.
 
 You can run MongoDB locally using Podman with the following steps:
 
-1. Create a directory for MongoDB data persistence:
+1. Create a podman volume for MongoDB data persistence:
 
    ```bash
-   mkdir -p ~/mongodb/data
+   podman volume create backport-dashboard-mongodb
    ```
 
-2. Run MongoDB container:
+2. Generate a decent password and create a podman secret for the database
+
+   ```bash
+   podman volume create backport-dashboard-mongodb
+   printf "mydecentpassword" | podman secret create backport-dashboard-mongo-adminpw -
+   ```
+
+3. Run MongoDB container:
 
    ```bash
    podman run -d \
      --name mongodb \
      -p 27017:27017 \
-     -v ~/mongodb/data:/data/db:Z \
-     -e MONGODB_INITDB_ROOT_USERNAME=admin \
-     -e MONGODB_INITDB_ROOT_PASSWORD=password \
+     -v backport-dashboard-mongodb:/data/db:z \
+     -e MONGO_INITDB_ROOT_USERNAME=admin \
+     --secret backport-dashboard-mongodb,type=env,target=MONGO_INITDB_ROOT_PASSWORD \
      docker.io/mongo:7.0
    ```
 
-3. Verify the container is running:
+4. Verify the container is running:
 
    ```bash
    podman ps
    ```
 
-4. Connect to MongoDB using the MongoDB shell (optional):
+5. Connect to MongoDB using the MongoDB shell (optional):
 
    ```bash
-   podman exec -it mongodb mongosh -u admin -p password
+   podman exec -it mongodb mongosh -u admin -p mydecentpassword
    ```
 
 To stop and remove the container:
