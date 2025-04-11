@@ -129,7 +129,7 @@ func (t *backoffTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		}
 
 		// Log the backoff
-		log.Info().Msgf("Rate limited by Jira API. Retrying in %v. Attempt %d/%d",
+		log.Debug().Msgf("Rate limited by Jira API. Retrying in %v. Attempt %d/%d",
 			sleepDuration, retries+1, t.maxRetries)
 
 		select {
