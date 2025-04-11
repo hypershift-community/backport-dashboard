@@ -283,6 +283,9 @@ func syncIssues(jiraClient *jira.Client, mongoClient *mongo.Client, config *Conf
 
 		// Process each issue
 		for _, issue := range issues {
+			// Track that this document was returned by the query
+			updatedDocuments[issue.Key] = true
+
 			// Extract issue data recursively from the issue and its chain of clones
 			data, err := storeIssue(jiraClient, issue.Key, 0)
 			if err != nil {
@@ -301,9 +304,6 @@ func syncIssues(jiraClient *jira.Client, mongoClient *mongo.Client, config *Conf
 				continue
 			}
 			log.Info().Msgf("Upserted issue %s", issue.Key)
-
-			// Track that this document was updated
-			updatedDocuments[issue.Key] = true
 		}
 
 		// Check if there are more issues to fetch
