@@ -3,10 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
-	"log"
 	"net/http"
-	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -18,6 +17,9 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 type Config struct {
@@ -127,7 +129,7 @@ func (t *backoffTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 		}
 
 		// Log the backoff
-		log.Printf("Rate limited by Jira API. Retrying in %v. Attempt %d/%d",
+		log.Info().Msgf("Rate limited by Jira API. Retrying in %v. Attempt %d/%d",
 			sleepDuration, retries+1, t.maxRetries)
 
 		select {
@@ -188,7 +190,7 @@ func getCustomFieldValue(issue *jira.Issue, customFieldID string) string {
 
 func storeIssue(jiraClient *jira.Client, issueID string, depth uint) (bson.M, error) {
 	if depth > maxRecursionDepth {
-		log.Printf("Max recursion depth reached for issue %s", issueID)
+		log.Info().Msgf("Max recursion depth reached for issue %s", issueID)
 		return nil, nil
 	}
 	// Get the issue from Jira
@@ -270,18 +272,21 @@ func syncIssues(jiraClient *jira.Client, mongoClient *mongo.Client, config *Conf
 		Fields:     []string{"status"},
 	}
 
+	log.Debug().Msg("Starting Jira issue syncing.")
 	for {
 		issues, _, err := jiraClient.Issue.Search(context.Background(), jql, searchOptions)
 		if err != nil {
 			return fmt.Errorf("error searching Jira issues: %w", err)
 		}
 
+		log.Debug().Msgf("Retrieved %d jira issues that match the JQL %s", len(issues), jql)
+
 		// Process each issue
 		for _, issue := range issues {
 			// Extract issue data recursively from the issue and its chain of clones
 			data, err := storeIssue(jiraClient, issue.Key, 0)
 			if err != nil {
-				log.Printf("Error storing issue %s: %v", issue.Key, err)
+				log.Error().Msgf("Error storing issue %s: %v", issue.Key, err)
 				continue
 			}
 
@@ -292,10 +297,10 @@ func syncIssues(jiraClient *jira.Client, mongoClient *mongo.Client, config *Conf
 
 			_, err = collection.UpdateOne(context.Background(), filter, update, upsertOpts)
 			if err != nil {
-				log.Printf("Error upserting issue %s: %v", issue.Key, err)
+				log.Error().Msgf("Error upserting issue %s: %v", issue.Key, err)
 				continue
 			}
-			log.Printf("Upserted issue %s", issue.Key)
+			log.Info().Msgf("Upserted issue %s", issue.Key)
 
 			// Track that this document was updated
 			updatedDocuments[issue.Key] = true
@@ -318,7 +323,7 @@ func syncIssues(jiraClient *jira.Client, mongoClient *mongo.Client, config *Conf
 		return fmt.Errorf("error removing stale documents: %w", err)
 	}
 
-	log.Printf("Removed %d stale documents", deleteResult.DeletedCount)
+	log.Info().Msgf("Removed %d stale documents", deleteResult.DeletedCount)
 
 	return nil
 }
@@ -340,7 +345,7 @@ func getDocumentsHandler(mongoClient *mongo.Client, config *Config) http.Handler
 		// Find all documents
 		cursor, err := collection.Find(ctx, bson.M{})
 		if err != nil {
-			log.Printf("Error finding documents: %v", err)
+			log.Error().Msgf("Error finding documents: %v", err)
 			http.Error(w, "Error retrieving documents", http.StatusInternalServerError)
 			return
 		}
@@ -349,14 +354,14 @@ func getDocumentsHandler(mongoClient *mongo.Client, config *Config) http.Handler
 		// Decode documents
 		var documents []bson.M
 		if err := cursor.All(ctx, &documents); err != nil {
-			log.Printf("Error decoding documents: %v", err)
+			log.Error().Msgf("Error decoding documents: %v", err)
 			http.Error(w, "Error processing documents", http.StatusInternalServerError)
 			return
 		}
 
 		// Return JSON response
 		if err := json.NewEncoder(w).Encode(documents); err != nil {
-			log.Printf("Error encoding JSON response: %v", err)
+			log.Error().Msgf("Error encoding JSON response: %v", err)
 			http.Error(w, "Error generating response", http.StatusInternalServerError)
 			return
 		}
@@ -390,7 +395,7 @@ func markDocumentCompleteHandler(mongoClient *mongo.Client, config *Config) http
 		}
 
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			log.Printf("Error decoding request: %v", err)
+			log.Error().Msgf("Error decoding request: %v", err)
 			http.Error(w, "Bad request", http.StatusBadRequest)
 			return
 		}
@@ -408,7 +413,7 @@ func markDocumentCompleteHandler(mongoClient *mongo.Client, config *Config) http
 
 		result, err := collection.UpdateOne(ctx, filter, update)
 		if err != nil {
-			log.Printf("Error updating document: %v", err)
+			log.Error().Msgf("Error updating document: %v", err)
 			http.Error(w, "Error updating document", http.StatusInternalServerError)
 			return
 		}
@@ -433,7 +438,7 @@ func setupRoutes(mongoClient *mongo.Client, config *Config) http.Handler {
 	// Serve static frontend files
 	uiPath, err := filepath.Abs("ui")
 	if err != nil {
-		log.Fatalf("Invalid UI path: %v", err)
+		log.Fatal().Msgf("Invalid UI path: %v", err)
 	}
 
 	// Create file server
@@ -446,33 +451,46 @@ func setupRoutes(mongoClient *mongo.Client, config *Config) http.Handler {
 }
 
 func main() {
+	// Flag parsing
+	debug := flag.Bool("debug", false, "Sets log level to debug")
+	sync := flag.Bool("sync", false, "Enables jira syncing")
+	flag.Parse()
+
+	var logLevel zerolog.Level
+	if *debug {
+		logLevel = zerolog.DebugLevel
+	} else {
+		logLevel = zerolog.InfoLevel
+	}
+	zerolog.SetGlobalLevel(logLevel)
+
 	// Load configuration
 	config, err := loadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		log.Fatal().Msgf("Failed to load configuration: %v", err)
 	}
 
 	// Create MongoDB client
 	mongoClient, err := createMongoClient(config)
 	if err != nil {
-		log.Fatalf("Failed to create MongoDB client: %v", err)
+		log.Fatal().Msgf("Failed to create MongoDB client: %v", err)
 	}
 	defer mongoClient.Disconnect(context.Background())
 
 	// Check if sync flag is provided
-	if len(os.Args) > 1 && os.Args[1] == "--sync" {
+	if *sync {
 		// Create Jira client
 		jiraClient, err := createJiraClientWithBackoff(config)
 		if err != nil {
-			log.Fatalf("Failed to create Jira client: %v", err)
+			log.Fatal().Msgf("Failed to create Jira client: %v", err)
 		}
 
 		// Sync issues
 		if err := syncIssues(jiraClient, mongoClient, config); err != nil {
-			log.Fatalf("Failed to sync issues: %v", err)
+			log.Fatal().Msgf("Failed to sync issues: %v", err)
 		}
 
-		log.Println("Sync completed successfully")
+		log.Info().Msg("Sync completed successfully")
 		return
 	}
 
@@ -480,9 +498,9 @@ func main() {
 	router := setupRoutes(mongoClient, config)
 	serverAddr := fmt.Sprintf(":%d", config.Server.Port)
 
-	log.Printf("Starting server on %s", serverAddr)
+	log.Info().Msgf("Starting server on %s", serverAddr)
 
 	if err := http.ListenAndServe(serverAddr, router); err != nil {
-		log.Fatalf("Server error: %v", err)
+		log.Fatal().Msgf("Server error: %v", err)
 	}
 }
